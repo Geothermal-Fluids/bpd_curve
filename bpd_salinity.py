@@ -10,7 +10,9 @@ import numpy as np
 import pandas as pd
 import iapws
 import pint as pint
+from pint import UnitRegistry
 from plotnine import *
+import phreeqpy.iphreeqc.phreeqc_com as phreeqc_mod # install .com module for 64 bit from IPHREEQC
 from collections import namedtuple
 from warnings import warn
 
@@ -373,6 +375,13 @@ hyd_df = pd.DataFrame(hyd._asdict())
 # ----------------------------------------------------  
 # calculate hydrostatic bpd with salinity correction
 # ---------------------------------------------------- 
+
+chem_ions_mol = pd.DataFrame([[0.5, 0.5 , 0.5, 0.5, 0.5, 0.5]], columns = ['Na', 'K', 'Ca', 'Cl', 'SO4', 'HCO3'])
+chem_gas_mol = pd.DataFrame([[0.01, 0.01, 0.001, 0.001]], columns = ['CH4', 'CO2', 'N2', 'H2'])
+
+
+
+
 sal_curve = bpdc_salinity(depth = df["depth_m"],
                 p0=df["pressure_bara"].min(),
                 chem_ions = chem_ions_mol,
@@ -390,8 +399,6 @@ sal_df = pd.DataFrame(sal_curve._asdict())
 # ---------------------------------------------------- 
 
 ggplot(df, aes(y = "depth_m")) +\
-    geom_line(aes(x="tsat_degC", colour = "'well pressure + iapws'")) + \
-    geom_line(aes(x = "temp_degC", colour = "'well data only'")) + \
     geom_line(aes(x = "tsat", y = "depth", colour = "'hydrostatic + iapws'"), data = hyd_df) + \
     geom_line(aes(x = "tsat", y = "depth", colour = "'salinity corrected'"), data = sal_df) + \
     scale_y_reverse() + \

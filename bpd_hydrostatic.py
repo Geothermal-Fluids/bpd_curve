@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import iapws
 import pint as pint
+from pint import UnitRegistry
 from plotnine import *
 from collections import namedtuple
 from warnings import warn
