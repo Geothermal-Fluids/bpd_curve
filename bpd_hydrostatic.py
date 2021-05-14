@@ -22,59 +22,6 @@ u = pint.UnitRegistry()
 # functions
 # ----------------------------------------------------
 
-    '''
-    Function to calculate the hydrostatic boiling point depth curve, similar to:
-    Haas Jr., J.L., 1971. The effect of salinity on the maximum thermal gradient 
-    of a hydrothermal system at hydrostatic pressure. Econ. Geol. 66, 940–946.
-
-    Parameters
-    ----------
-    dmin : float
-        mimimum depth for bpd [m]
-    dmax : float
-        maximum depth for bpd [m]
-    steps : integer
-        number of steps for integral
-    p_bar : float, optional
-        surface pressure of well [bara]. The default is 1.01325.
-    method : string
-        Method to calculate brine density. The default is "iapws".
-
-    Returns
-    -------
-    df : pd.DataFrame
-        
-
-    '''
-    g = 9.81
-    depth = np.linspace(dmin, dmax, steps)
-    depth_diff = np.diff(depth)
-
-    if method == "iapws":
-        pressure = np.array([p_bar*0.1]) # conversion to MPa for iaps
-        tsat = iapws.iapws97._TSat_P(pressure[0]) #conversion to K for iapws  
-        rho = iapws.iapws97.IAPWS97_PT(p_bar, tsat).rho # calculate density of first step
-        density = np.array([rho])
-        
-        for i in depth_diff:
-            # calculate new pressure for this step
-            dp = rho*g*i*1e-5*0.1 # pressure difference in MPa
-            p = pressure[-1] + dp
-            # calculate new temperature for this step
-            saturation_temp = iapws.iapws97._TSat_P(p) 
-            # calculate new density for next step
-            rho = iapws.iapws97.IAPWS97_PT(p, saturation_temp).rho
-            # save pressure, temperature and density
-            pressure = np.append(pressure, p)
-            tsat = np.append(tsat, saturation_temp)
-            density = np.append(density, rho)
-        
-        pressure = pressure*10
-        tsat = tsat-273.15
-        
-        df = pd.DataFrame(list(zip(depth, pressure, tsat, density)), columns = ["depth_m", "p_bar", "t_c", "rho"])
-        
-    return df
 
 def hydrostatic_bpdc(depth, p0=None, method="iapws", units='common'):
     '''
@@ -186,13 +133,14 @@ for p in pressure:
 df['tsat_degC'] = tsat
 
 
+
     
 # ----------------------------------------------------  
 # calculate hydrostatic pressure
 # ---------------------------------------------------- 
     
-
-hyd = hydrostatic_bpdc(depth=df['depth_m'], 
+# cut depth data to water level and run bpdc calculation
+hyd = hydrostatic_bpdc(depth=df['depth_m'][34:], 
                        p0=df["pressure_bara"].min(),
                        method='iapws',
                        units=['m', 'bar', 'degC', 'kg/m**3'],

@@ -9,9 +9,8 @@ Created on Thu May 13 10:27:29 2021
 import numpy as np
 import pandas as pd
 import iapws
-from plotnine import *
 import pint as pint
-import phreeqpy.iphreeqc.phreeqc_com as phreeqc_mod # install .com module for 64 bit from IPHREEQC 
+from plotnine import *
 from collections import namedtuple
 from warnings import warn
 
@@ -150,66 +149,63 @@ def get_chemical_properties(output):
     t_phreeqc = output[2][6]
     
     return partial_pressure, rho_phreeqc, t_phreeqc
-
-def iterate_chemical_model(chem_ions, chem_gas_mol, t, p_convergence, database_path, tolerance = 0.01, chem_units = "mg/L", pH = 7):
-    """  
-    Function to iterate over chemical model
+    '''
+    Function to calculate the hydrostatic boiling point depth curve, similar to:
+    Haas Jr., J.L., 1971. The effect of salinity on the maximum thermal gradient 
+    of a hydrothermal system at hydrostatic pressure. Econ. Geol. 66, 940–946.
 
     Parameters
     ----------
-    chem_ions_mol : pd.DataFrame
-        Contains the ionic composition of the fluid with the chemical units defined in chem_units.
-    chem_gas_mol : pd.DataFrame
-        Contains the gas amount of the individual gases in mol/kgw.
-    t : float
-        Temperature [°C]
-    p_convergence : float
-        Pressure [bara]. It is converted to atm for PHREEQC in make_chemical_model
-    chem_units : string, optional
-        Units in which the chemical composition is supplied. 
-        Options are "mg/L" (equal to ppm), "mol/L" (molarity) and "mol/kgw" (molality). 
-        The default is "mg/L" which is equal to ppm.
-    pH : float, optional
-        DESCRIPTION. The default is 7.
-        
+    dmin : float
+        mimimum depth for bpd [m]
+    dmax : float
+        maximum depth for bpd [m]
+    steps : integer
+        number of steps for integral
+    p_bar : float, optional
+        surface pressure of well [bara]. The default is 1.01325.
+    method : string
+        Method to calculate brine density. The default is "iapws".
+
     Returns
     -------
-    chemical model string
-    
-    """
-    
-    upper_range = p_convergence + tolerance
-    lower_range = p_convergence - tolerance
-    stop_crit = 1 # stop criterion in case no convergence is reached
-    pp = 0
-    
-    # brute force solver
-    # adjusts temperature until pp and p_convergence are equal
-    # stop criterion is, that partial pressure is within tolerance of convergence pressure
-    while not(pp < upper_range and pp > lower_range):
-        # run chemical model
-        chemical_model = make_chemical_model(chem_ions, chem_gas_mol, t, p_convergence, chem_units = chem_units, pH = 7) 
-        output = run_chemcial_model(chemical_model, database_path)
-        pp, rho, t_phreeqc = get_chemical_properties(output)
+    df : pd.DataFrame
         
-        # adjust temperature for convergence
-        if pp > upper_range:
-            factor = p_convergence/pp + (1-p_convergence/pp)/1.03 # create relative factor for temperature adjustment
-            t = t*factor
-        elif pp < lower_range:
-            factor = (p_convergence/pp + (1-p_convergence/pp)/1.03) # create relative factor for temperature adjustment
-            t = t*factor
-        #print(pp, p_convergence, t, factor, pp > upper_range, pp < lower_range)
-        # stop criterion in case no convergence is reached
-        stop_crit = stop_crit +1
-        if stop_crit > 1000:
-            warn("No convergence achieved.")
-            return
+
+    '''
+    g = 9.81
+    depth = np.linspace(dmin, dmax, steps)
+    depth_diff = np.diff(depth)
+
+    if method == "iapws":
+        pressure = np.array([p_bar*0.1]) # conversion to MPa for iaps
+        tsat = iapws.iapws97._TSat_P(pressure[0]) #conversion to K for iapws  
+        rho = iapws.iapws97.IAPWS97_PT(p_bar, tsat).rho # calculate density of first step
+        density = np.array([rho])
         
-    return pp, rho, t_phreeqc
+        for i in depth_diff:
+            # calculate new pressure for this step
+            dp = rho*g*i*1e-5*0.1 # pressure difference in MPa
+            p = pressure[-1] + dp
+            # calculate new temperature for this step
+            saturation_temp = iapws.iapws97._TSat_P(p) 
+            # calculate new density for next step
+            rho = iapws.iapws97.IAPWS97_PT(p, saturation_temp).rho
+            # save pressure, temperature and density
+            pressure = np.append(pressure, p)
+            tsat = np.append(tsat, saturation_temp)
+            density = np.append(density, rho)
         
-# units are still a mess, need to be pinted
-def bpdc_gas(depth, p0, chem_ions, chem_gas_mol, database_path, tolerance = 0.01, chem_units = "mol/kgw", units='common'):
+        pressure = pressure*10
+        tsat = tsat-273.15
+        
+        df = pd.DataFrame(list(zip(depth, pressure, tsat, density)), columns = ["depth_m", "p_bar", "t_c", "rho"])
+        
+    return df
+
+
+# All units "pinted" except for Temperature. 
+def bpdc_salinity(depth, p0, chem_ions, chem_gas_mol, database_path, tolerance = 0.01, chem_units = "mol/kgw", units='common'):
     '''
     Function to calculate the hydrostatic boiling point depth curve, similar to:
     Haas Jr., J.L., 1971. The effect of salinity on the maximum thermal gradient 
@@ -268,21 +264,23 @@ def bpdc_gas(depth, p0, chem_ions, chem_gas_mol, database_path, tolerance = 0.01
         p0 = 101325 * u_p
     else:
         p0 = p0 * u_p  
-    p0 = p0.to('bar')  
+    p0 = p0.to('MPa')  
 
     # Compute using PHREEQC option.
     pressure = np.atleast_1d(p0)
     # select starting temperature for iterate_chemical_models (reduces number of iterations)
     t_model = 100
     #print(chem_ions, chem_gas_mol, t_model, p0.to('atm').m, database_path, tolerance, chem_units)
-    # iterate chemical model until partial pressure of model is equal to pressure
-    pp, rho, tsat = iterate_chemical_model(chem_ions = chem_ions, 
-                                           chem_gas_mol = chem_gas_mol, 
-                                           t = t_model, # temperature is calculated in iterate_chemical_model; this is a starting value
-                                           p_convergence = p0.to('atm').m, 
-                                           database_path = database_path, 
-                                           tolerance = tolerance, 
-                                           chem_units = chem_units) 
+
+    tsat = iapws.iapws97._TSat_P(p0.m) - 273.15
+    
+    
+    # calculate density wwith chemical model
+    chemical_model = make_chemical_model(chem_ions, chem_gas_mol, tsat, 
+                                             pressure[-1].m/1.01325, chem_units = chem_units, pH = 7) 
+    output = run_chemcial_model(chemical_model, database_path)
+    pp, rho, t_dont_save = get_chemical_properties(output)
+    
     #tsat = tsat * u.K
     #print(tsat)
     tsat = np.atleast_1d(tsat)
@@ -300,21 +298,23 @@ def bpdc_gas(depth, p0, chem_ions, chem_gas_mol, database_path, tolerance = 0.01
         else:
             t_model = 100
             
-        # iterate chemical model until partial pressure of model is equal to pressure
-        pp, rho, t = iterate_chemical_model(chem_ions = chem_ions, 
-                                               chem_gas_mol = chem_gas_mol, 
-                                               t = t_model, # temperature is calculated in iterate_chemical_model; this is a starting value
-                                               p_convergence = pressure[-1].m, 
-                                               database_path = database_path, 
-                                               tolerance = tolerance, 
-                                               chem_units = chem_units) 
+        
         
         # Calculate new temperature for this step.
         #t = t * u.K
+        t = iapws.iapws97._TSat_P(new_p.m) -273.15
         tsat = np.append(tsat, t)
         print(tsat)
-        # Calculate new density for next step.
+        
+        # iterate chemical model until partial pressure of model is equal to pressure
+        chemical_model = make_chemical_model(chem_ions, chem_gas_mol, t, 
+                                             pressure[-1].m/1.01325, chem_units = chem_units, pH = 7) 
+        output = run_chemcial_model(chemical_model, database_path)
+        pp, rho, t_dont_save = get_chemical_properties(output)
         rho = rho * u.kg / u.m**3
+ 
+        
+        # Calculate new density for next step.
         density = np.append(density, rho)
     
     # Finalize units.
@@ -329,25 +329,51 @@ def bpdc_gas(depth, p0, chem_ions, chem_gas_mol, database_path, tolerance = 0.01
 
 
 
-      
-  
-        
-
 
 
 # ----------------------------------------------------  
-# correct for gases
+# data and bpd from ICWallis
 # ---------------------------------------------------- 
 
-chem_ions_mol = pd.DataFrame([[0.5, 0.5 , 0.5, 0.5, 0.5, 0.5]], columns = ['Na', 'K', 'Ca', 'Cl', 'SO4', 'HCO3'])
-chem_gas_mol = pd.DataFrame([[0.01, 0.01, 0.001, 0.001]], columns = ['CH4', 'CO2', 'N2', 'H2'])
+
+# load real data
+df = pd.read_csv(r'C:/Users/t.hoerbrand/Documents/github/bpd_curve/data/Data-Temp-Heating37days.csv')
+df['pressure_bara'] = df.pres_barg - 1.01325
+
+# calculate bpd curve for pure water (iapws)
+df['pressure_mpa'] = df.pressure_bara * 0.1  # convert pressure to MPa for ipaws
+pressure = df['pressure_mpa'].tolist()
+tsat = []
+for p in pressure:
+    saturation_temp = iapws.iapws97._TSat_P(p) - 273.15  # calculate saturation temp in Kelvin & convert to degC
+    tsat.append(saturation_temp)
+df['tsat_degC'] = tsat
 
 
+    
+# ----------------------------------------------------  
+# calculate hydrostatic bpd
+# ---------------------------------------------------- 
+    
+
+hyd = hydrostatic_bpdc(depth=df['depth_m'], 
+                       p0=df["pressure_bara"].min(),
+                       method='iapws',
+                       units=['m', 'bar', 'degC', 'kg/m**3'],
+                      )
+
+# retain units and convert to DataFrame
+hyd_df = pd.DataFrame(hyd).T  # I don't really know why we have to transpose here.
+hyd_df.columns = columns=hyd._fields
+
+# remove units and convert to DataFrame
+hyd_df = pd.DataFrame(hyd._asdict())
 
 
-
-
-gas_curve = bpdc_gas(depth = df["depth_m"][0:40],
+# ----------------------------------------------------  
+# calculate hydrostatic bpd with salinity correction
+# ---------------------------------------------------- 
+sal_curve = bpdc_salinity(depth = df["depth_m"],
                 p0=df["pressure_bara"].min(),
                 chem_ions = chem_ions_mol,
                 chem_gas_mol = chem_gas_mol,
@@ -355,101 +381,22 @@ gas_curve = bpdc_gas(depth = df["depth_m"][0:40],
                 tolerance = 0.1,
                 chem_units = "mol/kgw")
 
-gas_df = pd.DataFrame(gas_curve._asdict())
+sal_df = pd.DataFrame(sal_curve._asdict())
 
- 
-
-
-
-
-# this is a mess from here, I'll clean up on another day
-
-pp, rho, t = iterate_chemical_model(chem_ions_mol, chem_gas_mol, 
-                                    t = 150, 
-                                    p_convergence = 19.086, 
-                                    database_path = r"C:/phreeqc/database/pitzer.dat", 
-                                    tolerance = 0.01, 
-                                    chem_units = "mol/kgw") 
-
-chemical_model = make_chemical_model(chem_ions_mol, chem_gas_mol, 208.23, 19.086, chem_units = "mol/kgw", pH = 7) 
-output = run_chemcial_model(chemical_model, r"C:/phreeqc/database/pitzer.dat")
-pp, rho, tsat = get_chemical_properties(output)
-
-iapws.iapws97._TSat_P(1.9086)-273.15
-      
-pd.DataFrame([output[2]], columns = output[0])   
-
-# only salinity correction
-# sal_curve = bpdc_salinity(depth = df["depth_m"],
-#                 p0=df["pressure_bara"].min(),
-#                 chem_ions = chem_ions_mol,
-#                 chem_gas_mol = chem_gas_mol,
-#                 database_path = r"C:/phreeqc/database/pitzer.dat",
-#                 tolerance = 0.1,
-#                 chem_units = "mol/kgw")
-
-# sal_df = pd.DataFrame(sal_curve._asdict())
 
 
 # ----------------------------------------------------  
 # compare results
 # ---------------------------------------------------- 
 
-# ggplot(df, aes(y = "depth_m")) +\
-#     geom_line(aes(x="tsat_degC", colour = "'well pressure + iapws'")) + \
-#     geom_line(aes(x = "temp_degC", colour = "'well data only'")) + \
-#     scale_y_reverse() + \
-#     labs(x = "T [°C]", y = "depth [m]", colour = "legend")
-
-# ggplot(df, aes(y = "depth_m")) +\
-#     geom_line(aes(x="tsat_degC", colour = "'well pressure + iapws'")) + \
-#     geom_line(aes(x = "temp_degC", colour = "'well data only'")) + \
-#     geom_line(aes(x = "tsat", y = "depth", colour = "'hydrostatic + iapws'"), data = hyd_df)  + \
-#     scale_y_reverse() + \
-#     labs(x = "T [°C]", y = "depth [m]", colour = "legend")
-    
-# ggplot(df, aes(y = "depth_m")) +\
-#     geom_line(aes(x="tsat_degC", colour = "'well pressure + iapws'")) + \
-#     geom_line(aes(x = "temp_degC", colour = "'well data only'")) + \
-#     geom_line(aes(x = "tsat", y = "depth", colour = "'hydrostatic + iapws'"), data = hyd_df) + \
-#     geom_line(aes(x = "tsat", y = "depth", colour = "'salinity corrected'"), data = sal_df) + \
-#     scale_y_reverse() + \
-#     labs(x = "T [°C]", y = "depth [m]", colour = "legend")
-    
 ggplot(df, aes(y = "depth_m")) +\
     geom_line(aes(x="tsat_degC", colour = "'well pressure + iapws'")) + \
     geom_line(aes(x = "temp_degC", colour = "'well data only'")) + \
     geom_line(aes(x = "tsat", y = "depth", colour = "'hydrostatic + iapws'"), data = hyd_df) + \
-    geom_line(aes(x = "tsat", y = "depth", colour = "'gas and salinity corrected'"), data = gas_df) + \
+    geom_line(aes(x = "tsat", y = "depth", colour = "'salinity corrected'"), data = sal_df) + \
     scale_y_reverse() + \
     labs(x = "T [°C]", y = "depth [m]", colour = "legend")
-    
-# ggplot(df, aes(y = "pressure_bara")) +\
-#     geom_line(aes(x="tsat_degC", colour = "'well pressure + iapws'")) + \
-#     geom_line(aes(x = "temp_degC", colour = "'well data only'")) + \
-#     geom_line(aes(x = "tsat", y = "pressure", colour = "'hydrostatic + iapws'"), data = hyd_df) + \
-#     geom_line(aes(x = "tsat", y = "pressure", colour = "'gas and salinity corrected'"), data = gas_df) + \
-#     scale_y_reverse() + \
-#     labs(x = "T [°C]", y = "pressure [bara]", colour = "legend")
-    
-# ggplot(df, aes(y = "depth_m")) + \
-#     geom_line(aes(x="pressure_bara", colour = "'well pressure + iapws'")) + \
-#     geom_line(aes(x = "pressure_bara", colour = "'well data only'")) + \
-#     geom_line(aes(x = "pressure", y = "depth", colour = "'hydrostatic + iapws'"), data = hyd_df) + \
-#     scale_y_reverse() + \
-#     labs(x = "T [°C]", y = "depth [m]", colour = "legend")
-
-# ggplot(df, aes(y = "depth_m")) +\
-#     geom_line(aes(y = "rho", x = "tsat", colour = "'hydrostatic + iapws'"), data = hyd_df) + \
-#     geom_line(aes(y = "rho", x = "tsat", colour = "'gas and salinity corrected'"), data = gas_df) + \
-#     labs(y = "rho", x = "T [°C]", colour = "legend")
-
-
-# general observations / assumptions etc
-# * if the pressure is supplied, the hydrostatic pressure does not have to be calculated
-# * Arnorsson: Rising hot waters begin to boil when steam pressure plus total gas pressure become equal to the hydrostatic pressure.
 
 
 
         
-    
