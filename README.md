@@ -11,7 +11,7 @@ Development of the BPD curve concept, as it is used in geothermal resource analy
 
 _Classification for geothermal systems by enthalpy (from Kaya et al., 2011)_
 
-!(system-classification)[https://raw.githubusercontent.com/ICWallis/T21-Tutorial-WellTestAnalysis/main/Figures/Table1.png]
+![system-types](https://github.com/Geothermal-Fluids/bpd_curve/blob/main/system-types.png)
 
 During exploration, the BPD curve may used to approximate the upper limit of temperature with depth by assuming a hydrostatic pressure gradient, which is a reasonable assumption for geothermal reservoirs. Prior to drilling and if springs or fumaroles are available for sampling, the reservoir temperature is estimated using geothermometers (i.e., fluid-mineral equilibria that are modelled or empirically fit to derive a numerical expression that relates temperature to constituent concentrations). The combination of these temperature estimates and the BPD curve will inform the pre-drilling conceptual model and support the evaluation of drilling risk from steam/two-phase conditions. 
 
