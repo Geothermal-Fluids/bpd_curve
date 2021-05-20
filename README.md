@@ -2,7 +2,7 @@
 
 Construction of BPD curves with salinity and gas corrections. These curves define the temperature of saturation (i.e., when liquid and vapour water are present) for a given pressure.
 
-This project was initiated during the World Geothermal Congress May 2021 Hackathon organised by [Agile](https://agilescientific.com/). The project was scoped by Irene Wallis, [Cubic Earth](https://www.cubicearth.nz/). Development is led by [Thorsten Hörbrand](https://github.com/thoerbr) with contributions from [Jan Niederau](https://github.com/Japhiolite), and [Irene Wallis](https://github.com/ICWallis). This BPD tool is in its infancy and contributions to its continued development are welcome. 
+This project was initiated during the World Geothermal Congress May 2021 Hackathon organised by [Agile](https://agilescientific.com/). The project was scoped by Irene Wallis, [Cubic Earth](https://www.cubicearth.nz/). Development is led by [Thorsten Hörbrand](https://github.com/thoerbr) with contributions from [Jan Niederau](https://github.com/Japhiolite) and [Irene Wallis](https://github.com/ICWallis). This BPD tool is in its infancy and contributions are welcome. 
 
 ***
 ## BPD Curves in Geothermal Resource and Well Analysis
