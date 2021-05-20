@@ -17,7 +17,7 @@ The BPD curve informs analysis of temperature logs acquired in geothermal wells.
 
 Increasing salinity (Na-Ca-K-Cl) or gas (dominantly CO2 and H2S) concentrations will have opposing effects on depth to saturation. Increased gas concentration will allow boiling to start at greater depths whereas an increased salinity suppresses the boiling point, requiring the fluid to ascend to shallower depths before boiling. Most geothermal reservoirs have low concentrations of salts and small changes in salinity have little impact on the BPD curve. In contrast, a shift in gas concentration will have a great impact on BPD. Subsequently, boiling zones can be much deeper in high-gas geothermal reservoirs than in those that are gas-poor (Nicholson, 1994). 
 
-FIGURE
+![BPD-Curve-Concept](https://github.com/Geothermal-Fluids/bpd_curve/blob/main/bpd_concept.png)
 
 Steam bubbles in a column of fluid will also result in a steeper BPD gradient, and therefore deeper boiling, because they lower the weight (pressure) of the fluid above (Haas, 1971). Canet et al. (2011) modelled the impact of excluding vapour bubbles in a BPD curve for the shallow subsurface (<550 m). They found that for temperatures between 200 and 225°C, as would be expected in the shallow subsurface of high-temperature reservoirs, exclusion of vapour bubbles when deriving the BPD condition leads to a c. 40-50% underestimate of the depth to boiling.
 
